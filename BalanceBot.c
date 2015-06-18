@@ -21,7 +21,7 @@
 
 #define CLOCK_FREQ 8000000
 #define UART_BAUDRATE 38400
-#define UART_TICKS_PER_BIT (UART_BAUDRATE / CLOCK_FREQ)
+#define UART_TICKS_PER_BIT (CLOCK_FREQ / UART_BAUDRATE)
 /*
 void InitialiseUSI (void) {
 	//pinMode(DataIn, INPUT);         // Define DI as input
