@@ -78,41 +78,46 @@ unsigned char ReverseByte (unsigned char x) {
 #define START_BIT 1<<0
 #define STOP_BIT 1<<1
 #define RUN_BIT 1<<2
+#define PRECALC_BIT 1<<3
 
 #define UART_BUFFER_SIZE 16
 
-char uart_status;
+char uart_status = PRECALC_BIT;
 char uart_buffer[UART_BUFFER_SIZE];
 uint8_t uart_start_idx, uart_buffer_fill;
 
-ISR(TIMER0_OVF_vect) {
+void precalculate_uart_bit() {
 	static uint8_t uart_bit_mask;
-	if (uart_status & RUN_BIT) {
-		if (uart_status & START_BIT) {
-			bit_clear(PORTB, BIT(UART_TX));
-			bit_clear(uart_status, START_BIT);
-			uart_bit_mask = 1;
+	if (uart_status & START_BIT) {
+		bit_clear(uart_status, START_BIT | PRECALC_BIT);
+		uart_bit_mask = 1;
+	}
+	else if (uart_status & STOP_BIT) {
+		bit_set(uart_status, PRECALC_BIT);
+		bit_clear(uart_status, STOP_BIT);
+		if (uart_buffer_fill == 0) {
+			bit_clear(uart_status, RUN_BIT);
 		}
-		else if (uart_status & STOP_BIT) {
-			bit_set(PORTB, BIT(UART_TX));
-			bit_clear(uart_status, STOP_BIT);
-			if (uart_buffer_fill == 0) {
-				bit_clear(uart_status, RUN_BIT);
-			} 
-			else {
-				uart_buffer_fill--;
-				uart_start_idx = (uart_start_idx + 1) % UART_BUFFER_SIZE;
-				bit_set(uart_status, START_BIT);
-			}
-		} 
-		else {  // data bits
-			bit_write(uart_buffer[uart_start_idx] & uart_bit_mask , PORTB, BIT(UART_TX));
-			uart_bit_mask <<= 1;
-			if(!uart_bit_mask)
-				bit_set(uart_status, STOP_BIT);
+		else {
+			uart_buffer_fill--;
+			uart_start_idx = (uart_start_idx + 1) % UART_BUFFER_SIZE;
+			bit_set(uart_status, START_BIT);
 		}
 	}
-	TCNT0L = UART_START;
+	else {  // data bits
+		bit_write(uart_buffer[uart_start_idx] & uart_bit_mask , uart_status, PRECALC_BIT);
+		uart_bit_mask <<= 1;
+		if(!uart_bit_mask)
+		bit_set(uart_status, STOP_BIT);
+	}
+}
+
+ISR(TIMER0_OVF_vect) {
+	TCNT0L = UART_START; //restart timer loop
+	bit_write(uart_status & PRECALC_BIT, PORTB, 1<<UART_TX);
+	if (uart_status & RUN_BIT) {
+		precalculate_uart_bit();
+	}
 }
 
 
