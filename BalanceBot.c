@@ -122,7 +122,11 @@ ISR(TIMER0_OVF_vect) {
 
 
 ISR(TIMER0_COMPA_vect){
-	bit_flip(PORTB, BIT(UART_TX)); // do some random stuff
+		TCNT0L = 0;
+		bit_write(uart_status & PRECALC_BIT, PORTB, 1<<UART_TX);
+		if (uart_status & RUN_BIT) {
+			precalculate_uart_bit();
+		}
 }
 
 uint8_t putstring(char string[]) {
@@ -166,15 +170,11 @@ int main(void)
 	DDRB = 0b00101001;
 	
 	bit_set(PORTB, BIT(UART_TX)); // high when idle
-	
-	// setup timer overflow
-	bit_clear(TIFR, 1<<TOV0);
-	bit_set(TIMSK, 1<<TOIE0);	// enable timer0 overflow
-	
-/*	// setup timer0 compare
-	OCR0A = UART_TICKS_PER_BIT;
-	bit_clear(TIFR, 1<<OCF0A);
-	bit_set(TIMSK, 1<<OCIE0A);*/
+
+	// setup timer0 compare
+	OCR0A = UART_TICKS_PER_BIT - 28;
+	bit_clear(TIFR, 1<<OCF0A);	// clear interrupt bit
+	bit_set(TIMSK, 1<<OCIE0A);	// enable compare
 	
 	putstring("Booting");
 	sei(); // enable interrupts
