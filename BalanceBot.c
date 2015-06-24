@@ -123,12 +123,15 @@ ISR(TIMER0_COMPA_vect){
 
 uint8_t putstring(char string[]) {
 	int i=0;
-	while (string[i] != '\0' && i < UART_BUFFER_SIZE - uart_buffer_fill) {
+	while (string[i] != '\0' && i < UART_BUFFER_SIZE - uart_buffer_fill - 2) {
 		uart_buffer[(uart_start_idx + uart_buffer_fill + i) % UART_BUFFER_SIZE] = string[i];
 		i++;
 	}
-	bit_set(uart_status, RUN_BIT | START_BIT);
+	uart_buffer[(uart_start_idx + uart_buffer_fill + i) % UART_BUFFER_SIZE] = '\r';
+	i++;
+	uart_buffer[(uart_start_idx + uart_buffer_fill + i) % UART_BUFFER_SIZE] = '\n';
 	uart_buffer_fill += i;
+	bit_set(uart_status, RUN_BIT | START_BIT);
 	return i;
 }
 
