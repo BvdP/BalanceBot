@@ -112,14 +112,6 @@ void precalculate_uart_bit() {
 	}
 }
 
-ISR(TIMER0_OVF_vect) {
-	TCNT0L = UART_START; //restart timer loop
-	bit_write(uart_status & PRECALC_BIT, PORTB, 1<<UART_TX);
-	if (uart_status & RUN_BIT) {
-		precalculate_uart_bit();
-	}
-}
-
 
 ISR(TIMER0_COMPA_vect){
 		TCNT0L = 0;
