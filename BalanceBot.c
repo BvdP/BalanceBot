@@ -82,8 +82,8 @@ unsigned char ReverseByte (unsigned char x) {
 #define UART_BUFFER_SIZE 16
 
 char uart_status = PRECALC_BIT;
-char uart_buffer[UART_BUFFER_SIZE];
-uint8_t uart_start_idx, uart_buffer_fill;
+volatile char uart_buffer[UART_BUFFER_SIZE];
+volatile uint8_t uart_start_idx, uart_buffer_fill;
 
 void precalculate_uart_bit() {
 	static uint8_t uart_bit_mask;
@@ -116,6 +116,7 @@ ISR(TIMER0_COMPA_vect){
 		TCNT0L = 0;
 		bit_write(uart_status & PRECALC_BIT, PORTB, 1<<UART_TX);
 		if (uart_status & RUN_BIT) {
+			sei();
 			precalculate_uart_bit();
 		}
 }
