@@ -8,7 +8,6 @@
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
-//#include "../../../../../../../Program Files (x86)/Atmel/Atmel Toolchain/AVR8 GCC/Native/3.4.1061/avr8-gnu-toolchain/avr/include/avr/iotn861a.h"
 
 #define bit_get(p,m) ((p) & (m))
 #define bit_set(p,m) ((p) |= (m))
@@ -160,11 +159,11 @@ int main(void)
 	// set clock source
 	bit_set(TCCR0B, 1<<CS00);// no precaling
 	
+	bit_set(PORTB, BIT(UART_TX)); // high when idle
 	// set up IO pins
 	DDRA = 0b11110100;
 	DDRB = 0b00101001;
 	
-	bit_set(PORTB, BIT(UART_TX)); // high when idle
 
 	// setup timer0 compare
 	OCR0A = UART_TICKS_PER_BIT - 28;
