@@ -157,7 +157,7 @@ int main(void)
 		
 	*/
 	// set clock source
-	bit_set(TCCR0B, 1<<CS00);// no precaling
+	bit_set(TCCR0B, 1<<CS00);// no prescaling; 8MHz clock
 	
 	bit_set(PORTB, BIT(UART_TX)); // high when idle
 	// set up IO pins
