@@ -21,7 +21,7 @@
 #define CLOCK_FREQ 8000000
 #define UART_BAUDRATE 38400
 #define UART_TICKS_PER_BIT (CLOCK_FREQ / UART_BAUDRATE + 9) // +9: hand tuned value for 38400 bps
-/*
+
 void InitialiseUSI (void) {
 	//pinMode(DataIn, INPUT);         // Define DI as input
 	USICR = 0;                      // Disable USI.
@@ -31,36 +31,7 @@ void InitialiseUSI (void) {
 }
 
 
-// some interrupt handlers for input UART
-ISR (PCINT_vect) {	// pin change
-	if (!(PINB & 1<<PINB0)) {       // Ignore if DI is high
-		GIMSK &= ~(1<<PCIE1);          // Disable pin change interrupts
-		TCCR0A = 2<<WGM00;            // CTC mode
-		TCCR0B = 0<<WGM02 | 2<<CS00;  // Set prescaler to /8
-		TCNT0 = 0;                    // Count up from 0
-		OCR0A = 51;                   // Delay (51+1)*8 cycles
-		TIFR |= 1<<OCF0A;             // Clear output compare flag
-		TIMSK |= 1<<OCIE0A;           // Enable output compare interrupt
-	}
-}
-	
-ISR (TIMER0_COMPA_vect) {
-	TIMSK &= ~(1<<OCIE0A);          // Disable COMPA interrupt
-	TCNT0 = 0;                      // Count up from 0
-	OCR0A = 103;                    // Shift every (103+1)*8 cycles
-	// Enable USI OVF interrupt, and select Timer0 compare match as USI Clock source:
-	USICR = 1<<USIOIE | 0<<USIWM0 | 1<<USICS0;
-	USISR = 1<<USIOIF | 8;          // Clear USI OVF flag, and set counter
-}
-	
-ISR (USI_OVF_vect) {	// USI overflow
-	USICR = 0;                      // Disable USI
-	int temp = USIDR;
-	Display(ReverseByte(temp));
-	GIFR = 1<<PCIF;                 // Clear pin change interrupt flag.
-	GIMSK |= 1<<PCIE1;               // Enable pin change interrupts again
-}
-*/
+
 unsigned char ReverseByte (unsigned char x) {
 	x = ((x >> 1) & 0x55) | ((x << 1) & 0xaa);
 	x = ((x >> 2) & 0x33) | ((x << 2) & 0xcc);
@@ -112,6 +83,33 @@ void precalculate_uart_bit() {
 }
 
 
+// some interrupt handlers for input UART
+ISR (PCINT_vect) {	// pin change
+	if (!(PINB & 1<<UART_TX)) {       // Ignore if DI is high
+		bit_clear(GIMSK , 1<<PCIE1);          // Disable pin change interrupts
+		OCR0B += UART_TICKS_PER_BIT / 2;
+		TIFR |= 1<<OCF0B;             // Clear output compare flag
+		TIMSK |= 1<<OCIE0B;           // Enable output compare interrupt
+	}
+}
+
+ISR (USI_OVF_vect) {	// USI overflow
+	USICR = 0;                      // Disable USI
+	int temp = USIDR;
+	//Display(ReverseByte(temp));
+	GIFR = 1<<PCIF;                 // Clear pin change interrupt flag.
+	GIMSK |= 1<<PCIE1;               // Enable pin change interrupts again
+}
+
+
+ISR (TIMER0_COMPB_vect) {
+	TIMSK &= ~(1<<OCIE0B);          // Disable COMPB interrupt
+	OCR0B += UART_TICKS_PER_BIT / 2;
+	// Enable USI OVF interrupt, and select Timer0 compare match as USI Clock source:
+	USICR = 1<<USIOIE | 0<<USIWM0 | 1<<USICS0;
+	USISR = 1<<USIOIF | 8;          // Clear USI OVF flag, and set counter
+}
+
 ISR(TIMER0_COMPA_vect){
 		OCR0A += UART_TICKS_PER_BIT;
 		bit_write(uart_status & PRECALC_BIT, PORTB, 1<<UART_TX);
@@ -120,7 +118,6 @@ ISR(TIMER0_COMPA_vect){
 			precalculate_uart_bit();
 		}
 }
-
 uint8_t putstring(char string[]) {
 	int i=0;
 	while (string[i] != '\0' && i < UART_BUFFER_SIZE - uart_buffer_fill - 2) {
@@ -141,13 +138,24 @@ void uart_setup() {
 
 	// configure pins
 	bit_set(PORTB, BIT(UART_TX)); // high when idle
-	bit_set(DDRB, 1<<UART_TX);
+	bit_set(DDRB, 1<<UART_TX);	// TX is output pin
 	//bit_clear(DDRB, 1<<UART_RX);
 
 	// setup timer0 compare
+
 	OCR0A = UART_TICKS_PER_BIT;
 	bit_clear(TIFR, 1<<OCF0A);	// clear interrupt bit
 	bit_set(TIMSK, 1<<OCIE0A);	// enable compare
+	
+	// input setup	
+	bit_set(TCCR0A, 1<<CS00);	// no prescaling; 8MHz clock
+	OCR0B = OCR0A / 2;			// run at half bit interval
+
+	USICR = 0;                      // Disable USI.
+	GIFR = 1<<PCIF;                 // Clear pin change interrupt flag.
+	bit_set(GIMSK, 1<<PCIE1);         // Enable pin change interrupts
+	bit_set(PCMSK1, 1<<UART_RX);    // Enable pin change on RX pin
+
 }
 
 int main(void)
