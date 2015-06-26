@@ -20,7 +20,7 @@
 
 #define CLOCK_FREQ 8000000
 #define UART_BAUDRATE 38400
-#define UART_TICKS_PER_BIT (CLOCK_FREQ / UART_BAUDRATE)
+#define UART_TICKS_PER_BIT (CLOCK_FREQ / UART_BAUDRATE + 9) // +9: hand tuned value for 38400 bps
 /*
 void InitialiseUSI (void) {
 	//pinMode(DataIn, INPUT);         // Define DI as input
@@ -68,7 +68,6 @@ unsigned char ReverseByte (unsigned char x) {
 	return x;
 }
 
-#define UART_START (0xFF - UART_TICKS_PER_BIT)
 
 
 #define UART_TX PORTB0
@@ -114,7 +113,7 @@ void precalculate_uart_bit() {
 
 
 ISR(TIMER0_COMPA_vect){
-		TCNT0L = 0;
+		OCR0A += UART_TICKS_PER_BIT;
 		bit_write(uart_status & PRECALC_BIT, PORTB, 1<<UART_TX);
 		if (uart_status & RUN_BIT) {
 			sei();
@@ -146,7 +145,7 @@ void uart_setup() {
 	//bit_clear(DDRB, 1<<UART_RX);
 
 	// setup timer0 compare
-	OCR0A = UART_TICKS_PER_BIT - 28; // -28: hand tuned value for 38400 bps
+	OCR0A = UART_TICKS_PER_BIT;
 	bit_clear(TIFR, 1<<OCF0A);	// clear interrupt bit
 	bit_set(TIMSK, 1<<OCIE0A);	// enable compare
 }
