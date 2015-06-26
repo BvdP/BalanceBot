@@ -72,6 +72,7 @@ unsigned char ReverseByte (unsigned char x) {
 
 
 #define UART_TX PORTB0
+#define UART_RX PORTB1
 
 //#define COUNT_BITS 0b111
 #define START_BIT 1<<0
@@ -135,6 +136,21 @@ uint8_t putstring(char string[]) {
 	return i;
 }
 
+void uart_setup() {
+	// set timer0 clock source
+	bit_set(TCCR0B, 1<<CS00);// no prescaling; 8MHz clock
+
+	// configure pins
+	bit_set(PORTB, BIT(UART_TX)); // high when idle
+	bit_set(DDRB, 1<<UART_TX);
+	//bit_clear(DDRB, 1<<UART_RX);
+
+	// setup timer0 compare
+	OCR0A = UART_TICKS_PER_BIT - 28; // -28: hand tuned value for 38400 bps
+	bit_clear(TIFR, 1<<OCF0A);	// clear interrupt bit
+	bit_set(TIMSK, 1<<OCIE0A);	// enable compare
+}
+
 int main(void)
 {
 	// configuration
@@ -157,20 +173,12 @@ int main(void)
 		B7 (10): /RESET
 		
 	*/
-	// set clock source
-	bit_set(TCCR0B, 1<<CS00);// no prescaling; 8MHz clock
+	uart_setup();
 	
-	bit_set(PORTB, BIT(UART_TX)); // high when idle
 	// set up IO pins
 	DDRA = 0b11110100;
 	DDRB = 0b00101001;
-	
 
-	// setup timer0 compare
-	OCR0A = UART_TICKS_PER_BIT - 28;
-	bit_clear(TIFR, 1<<OCF0A);	// clear interrupt bit
-	bit_set(TIMSK, 1<<OCIE0A);	// enable compare
-	
 	putstring("Booting");
 	sei(); // enable interrupts
 	//setupUartOut();
