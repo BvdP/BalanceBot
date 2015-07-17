@@ -31,11 +31,13 @@
 #define OUT_RUN (1<<2)
 #define OUT_PRECALC (1<<3)
 #define IN_START (1<<4)
-#define IN_STOP (1<<5)
+#define IN_READY (1<<5)
 
 #define UART_BUFFER_SIZE 16
 
-char uart_status = OUT_PRECALC;
+uint8_t putstring(char string[]);
+
+volatile char uart_status = OUT_PRECALC;
 volatile char uart_out_buffer[UART_BUFFER_SIZE];
 volatile uint8_t uart_out_start_idx = 0, uart_out_buffer_fill = 0;
 volatile char uart_in_buffer[UART_BUFFER_SIZE];
@@ -76,7 +78,7 @@ void precalculate_uart_bit() {
 
 ISR (PCINT_vect) {	// pin change
 	if (!(PINB & 1<<UART_RX)) {			// we're interested in the falling edge
-		bit_clear(PCMSK1, 1<<UART_RX);	// disable pin change interrupt on RX pin
+		bit_clear(PCMSK1, 1<<PCINT9);	// disable pin change interrupt on RX pin
 		OCR0B += UART_TICKS_PER_BIT / 2;// delay half a uart clock tick
 		bit_set(TIFR, 1<<OCF0B);		// clear timer compare flag
 		bit_set(uart_status, IN_START);
@@ -93,14 +95,18 @@ ISR (TIMER0_COMPB_vect) {
 			bit_mask = 1;
 			return;
 	}
-	if (uart_status & IN_STOP) {
-		bit_clear(uart_status, IN_STOP);
+	if (bit_mask == 0) {	// bit mask wrapped around --> stop bit
+		//bit_clear(uart_status, IN_STOP);
 		bit_clear(TIMSK, 1<<OCIE0B);	// disable timer0 compareB
-		bit_set(PCMSK1, 1<<UART_RX);	// Enable pin change interrupt on RX pin
-		uart_out_buffer_fill++;
+		bit_set(PCMSK1, 1<<PCINT9);	// Enable pin change interrupt on RX pin
+		if (uart_in_buffer[uart_in_buffer_fill] == '\n') {	// strings are \r\n terminated
+			uart_in_buffer[uart_in_buffer_fill - 1] = '\0';
+			bit_set(uart_status, IN_READY);
+		}
+		uart_in_buffer_fill++;
 		return;
 	}
-	bit_write(PORTB & UART_RX, uart_in_buffer[uart_in_start_idx + uart_in_buffer_fill % UART_BUFFER_SIZE], bit_mask);
+	bit_write(PORTB & (1 << UART_RX), uart_in_buffer[uart_in_buffer_fill % UART_BUFFER_SIZE], bit_mask);
 	bit_mask <<= 1;
 }
 
@@ -128,6 +134,14 @@ uint8_t putstring(char string[]) {
 	return i;
 }
 
+volatile char * getstring() {
+	if (uart_status & IN_READY) {
+		bit_clear(uart_status, IN_READY);
+		uart_in_buffer_fill = 0;
+	}
+	return uart_in_buffer;
+}
+
 void uart_setup() {
 	// set timer0 clock source
 	bit_set(TCCR0B, 1<<CS00);// no prescaling; 8MHz clock
@@ -142,14 +156,10 @@ void uart_setup() {
 	bit_clear(TIFR, 1<<OCF0A);	// clear interrupt bit
 	bit_set(TIMSK, 1<<OCIE0A);	// enable compare
 	
-	// input setup	
-	bit_set(TCCR0A, 1<<CS00);	// no prescaling; 8MHz clock
-//	OCR0B = OCR0A / 2;			// run at half bit interval
-
+	// input setup
 	GIFR = 1<<PCIF;					// Clear pin change interrupt flag.
-	bit_set(GIMSK, 1<<PCIE1);		// Enable pin change interrupts
-	bit_set(PCMSK1, 1<<UART_RX);	// Enable pin change interrupt on RX pin
-
+	bit_set(GIMSK, 1<<PCIE0);		// Enable pin change interrupts
+	PCMSK1 = 1<<PCINT9;				// Enable pin change interrupt on RX pin
 }
 
 int main(void)
@@ -165,7 +175,7 @@ int main(void)
 		A7 (11): MD IA1  --> output
 		
 		B0  (1): UART TX / ICP MOSI --> output (should be high when idle)
-		B1  (2): UART RX / ICP MISO --> input
+		B1  (2): UART RX / ICP MISO --> input (pcint9)
 		B2  (3): ICP SCK
 		B3  (4): MD ENB  --> output
 		B4  (7): FCSA	 --> analog input
@@ -186,6 +196,8 @@ int main(void)
 	
 	while(1) // main loop
 	{
-
+		if (uart_status & IN_READY) {
+			putstring((char *)getstring());
+		}
 	}
 }
