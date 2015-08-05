@@ -3,7 +3,7 @@
  *
  * Created: 27/05/2015 15:54:15
  *  Author: Bastiaan van der Peet
- */ 
+ */
 
 
 #include <avr/io.h>
@@ -64,8 +64,9 @@ void precalculate_uart_bit() {
 	else {  // data bits
 		bit_write(uart_out_buffer[uart_out_start_idx] & uart_bit_mask , uart_status, OUT_PRECALC);
 		uart_bit_mask <<= 1;
-		if(!uart_bit_mask)
-		bit_set(uart_status, OUT_STOP);
+		if(!uart_bit_mask) {
+			bit_set(uart_status, OUT_STOP);
+		}
 	}
 }
 
@@ -74,12 +75,12 @@ void precalculate_uart_bit() {
 // working in a nutshell:
 // high->low transition: this is the start bit; triggers interrupt
 // timer samples 8 databits at half- clock offset ()
-// stop bit is ignored
+// stop bit is not sampled
 
 ISR (PCINT_vect) {	// pin change
 	if (!(PINB & 1<<UART_RX)) {			// we're interested in the falling edge
 		bit_clear(PCMSK1, 1<<PCINT9);	// disable pin change interrupt on RX pin
-		OCR0B += UART_TICKS_PER_BIT / 2;// delay half a uart clock tick
+		OCR0B = TCNT0L + UART_TICKS_PER_BIT / 2;// delay half a uart clock tick
 		bit_set(TIFR, 1<<OCF0B);		// clear timer compare flag
 		bit_set(uart_status, IN_START);
 		bit_set(TIMSK, 1<<OCIE0B);		// enable timer0 compareB interrupt
@@ -99,14 +100,14 @@ ISR (TIMER0_COMPB_vect) {
 		//bit_clear(uart_status, IN_STOP);
 		bit_clear(TIMSK, 1<<OCIE0B);	// disable timer0 compareB
 		bit_set(PCMSK1, 1<<PCINT9);	// Enable pin change interrupt on RX pin
-		if (uart_in_buffer[uart_in_buffer_fill] == '\n') {	// strings are \r\n terminated
+		if (uart_in_buffer_fill > 0 && uart_in_buffer[uart_in_buffer_fill] == '\n') {	// strings are \r\n terminated
 			uart_in_buffer[uart_in_buffer_fill - 1] = '\0';
 			bit_set(uart_status, IN_READY);
 		}
 		uart_in_buffer_fill++;
 		return;
 	}
-	bit_write(PORTB & (1 << UART_RX), uart_in_buffer[uart_in_buffer_fill % UART_BUFFER_SIZE], bit_mask);
+	bit_write(PINB & (1 << UART_RX), uart_in_buffer[uart_in_buffer_fill % UART_BUFFER_SIZE], bit_mask);
 	bit_mask <<= 1;
 }
 
@@ -120,7 +121,7 @@ ISR(TIMER0_COMPA_vect){
 		}
 }
 
-uint8_t putstring(char string[]) {
+uint8_t putstring(char* string) {
 	int i=0;
 	while (string[i] != '\0' && i < UART_BUFFER_SIZE - uart_out_buffer_fill - 2) {
 		uart_out_buffer[(uart_out_start_idx + uart_out_buffer_fill + i) % UART_BUFFER_SIZE] = string[i];
@@ -134,12 +135,14 @@ uint8_t putstring(char string[]) {
 	return i;
 }
 
-volatile char * getstring() {
+void getstring(char* str) {
 	if (uart_status & IN_READY) {
+		for (int i=0; i < UART_BUFFER_SIZE; i++) {//TODO: add \0 check
+			str[i] = uart_in_buffer[i];
+		}
 		bit_clear(uart_status, IN_READY);
 		uart_in_buffer_fill = 0;
 	}
-	return uart_in_buffer;
 }
 
 void uart_setup() {
@@ -155,7 +158,7 @@ void uart_setup() {
 	OCR0A = UART_TICKS_PER_BIT;
 	bit_clear(TIFR, 1<<OCF0A);	// clear interrupt bit
 	bit_set(TIMSK, 1<<OCIE0A);	// enable compare
-	
+
 	// input setup
 	GIFR = 1<<PCIF;					// Clear pin change interrupt flag.
 	bit_set(GIMSK, 1<<PCIE0);		// Enable pin change interrupts
@@ -173,7 +176,7 @@ int main(void)
 		A5 (13): MD IB1  --> output
 		A6 (12): MD IA2  --> output
 		A7 (11): MD IA1  --> output
-		
+
 		B0  (1): UART TX / ICP MOSI --> output (should be high when idle)
 		B1  (2): UART RX / ICP MISO --> input (pcint9)
 		B2  (3): ICP SCK
@@ -182,22 +185,26 @@ int main(void)
 		B5  (8): MD ENA  --> output
 		B6  (9): MPU INT --> input
 		B7 (10): /RESET
-		
+
 	*/
 	uart_setup();
-	
+
 	// set up IO pins
 	DDRA = 0b11110100;
 	DDRB = 0b00101001;
 
 	putstring("Booting");
 	sei(); // enable interrupts
-	//setupUartOut();
-	
+
 	while(1) // main loop
 	{
 		if (uart_status & IN_READY) {
-			putstring((char *)getstring());
+			char tmp[UART_BUFFER_SIZE];
+			getstring(tmp);
+			if (tmp[0] == 'B') {
+				bit_flip(PORTA, 1<<3); // toggle NC pin
+			}
+			putstring(tmp);
 		}
 	}
 }
