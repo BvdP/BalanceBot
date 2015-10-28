@@ -193,7 +193,6 @@ int main(void)
 	DDRA = 0b11110100;
 	DDRB = 0b00101001;
 
-	putstring("Booting");
 	sei(); // enable interrupts
 
 	while(1) // main loop
