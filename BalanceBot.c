@@ -155,7 +155,6 @@ void uart_setup() {
 	//bit_clear(DDRB, 1<<UART_RX);
 
 	// setup timer0 compare
-	OCR0A = UART_TICKS_PER_BIT;
 	bit_clear(TIFR, 1<<OCF0A);	// clear interrupt bit
 	bit_set(TIMSK, 1<<OCIE0A);	// enable compare
 
