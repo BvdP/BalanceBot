@@ -80,7 +80,7 @@ void precalculate_uart_bit() {
 ISR (PCINT_vect) {	// pin change
 	if (!(PINB & 1<<UART_RX)) {			// we're interested in the falling edge
 		bit_clear(PCMSK1, 1<<PCINT9);	// disable pin change interrupt on RX pin
-		OCR0B = TCNT0L + UART_TICKS_PER_BIT / 2;// delay half a uart clock tick
+		OCR0B = TCNT0L + UART_TICKS_PER_BIT / 3 ;// delay 1/3 of a uart clock tick
 		bit_set(TIFR, 1<<OCF0B);		// clear timer compare flag
 		bit_set(uart_status, IN_START);
 		bit_set(TIMSK, 1<<OCIE0B);		// enable timer0 compareB interrupt
