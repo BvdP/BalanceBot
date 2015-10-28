@@ -28,7 +28,6 @@
 //define some uart_status bit masks
 #define OUT_START (1<<0)
 #define OUT_STOP (1<<1)
-#define OUT_RUN (1<<2)
 #define OUT_PRECALC (1<<3)
 #define IN_START (1<<4)
 #define IN_READY (1<<5)
@@ -53,7 +52,7 @@ void precalculate_uart_bit() {
 		bit_set(uart_status, OUT_PRECALC);
 		bit_clear(uart_status, OUT_STOP);
 		if (uart_out_buffer_fill == 0) {
-			bit_clear(uart_status, OUT_RUN);
+			bit_clear(TIMSK, 1<<OCIE0A);	// stop timer0 compareA interrupt
 		}
 		else {
 			uart_out_buffer_fill--;
@@ -114,11 +113,9 @@ ISR (TIMER0_COMPB_vect) {
 // timer interrupt for UART output
 ISR(TIMER0_COMPA_vect){
 		OCR0A += UART_TICKS_PER_BIT;
-		bit_write(uart_status & OUT_PRECALC, PORTB, 1<<UART_TX);
-		if (uart_status & OUT_RUN) {
-			sei();
-			precalculate_uart_bit();
-		}
+		bit_write(uart_status & OUT_PRECALC, PORTB, 1 << UART_TX);
+		sei();
+		precalculate_uart_bit();
 }
 
 uint8_t putstring(char* string) {
@@ -131,7 +128,8 @@ uint8_t putstring(char* string) {
 	i++;
 	uart_out_buffer[(uart_out_start_idx + uart_out_buffer_fill + i) % UART_BUFFER_SIZE] = '\n';
 	uart_out_buffer_fill += i;
-	bit_set(uart_status, OUT_RUN | OUT_START);
+	bit_set(uart_status, OUT_START);
+	bit_set(TIMSK, 1<<OCIE0A);	// start timer0 compareA interrupt
 	return i;
 }
 
